@@ -1,0 +1,5 @@
+FROM golang:1.22-alpine AS builder
+RUN apk add --no-cache git make gcc musl-dev curl
+WORKDIR /src
+RUN go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+ENTRYPOINT ["/src/entrypoint.sh"]

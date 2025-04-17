@@ -1,0 +1,11 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Containerfile.dev
+    environment:
+      - DEBUG_MODE=true
+    volumes:
+      - .:/src/
+    ports:
+      - "8080:8080"
