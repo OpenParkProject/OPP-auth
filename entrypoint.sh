@@ -16,5 +16,11 @@ go generate && echo "API generated" || echo "API generation failed"
 echo "Building app..."
 go build -buildvcs=false -o /go/bin/opp-auth .
 
+mkdir -p /root/keys && \
+openssl genrsa -out /root/keys/private.pem 4096 && \
+openssl rsa -in /root/keys/private.pem -pubout -out /root/keys/public.pem
+export PRIVATE_KEY=$(cat /root/keys/private.pem | base64 -w 0)
+export PUBLIC_KEY=$(cat /root/keys/public.pem | base64 -w 0)
+
 echo "Starting app..."
 /go/bin/opp-auth

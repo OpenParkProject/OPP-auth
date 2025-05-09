@@ -1,14 +1,19 @@
-//go:generate oapi-codegen -include-tags=session -generate types,gin-server -o api/api.gen.go -package api api/openapi.yaml
+//go:generate oapi-codegen -include-tags=session,user -generate types,gin-server -o api/api.gen.go -package api api/openapi.yaml
 
 package main
 
 import (
 	"OPP/auth/api"
+	"OPP/auth/db"
 	"OPP/auth/handlers"
+	"OPP/auth/jwt"
+	"OPP/auth/rbac"
+	"context"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/gin-gonic/gin"
 	ginmiddleware "github.com/oapi-codegen/gin-middleware"
 	"github.com/oapi-codegen/oapi-codegen/v2/pkg/util"
@@ -16,7 +21,31 @@ import (
 
 var DEBUG_MODE = os.Getenv("DEBUG_MODE") == "true"
 
+type opp_handlers struct {
+	handlers.SessionHandlers
+	handlers.UserHandlers
+}
+
 func main() {
+
+	rbac := rbac.SetupRBAC()
+	if rbac == nil {
+		log.Panicf("Failed to setup RBAC")
+	}
+
+	if err := db.Init(); err != nil {
+		log.Panicf("Failed to initialize database: %v", err)
+	}
+	if db.GetDB() == nil {
+		log.Panicf("Failed to get database instance")
+	} else {
+		defer db.GetDB().Close()
+	}
+
+	opp_auth_handlers := &opp_handlers{
+		SessionHandlers: *handlers.NewSessionHandler(),
+		UserHandlers:    *handlers.NewUserHandler(),
+	}
 
 	r := gin.New()
 	r.Use(gin.Logger())
@@ -40,8 +69,14 @@ func main() {
 
 	// Set up the authentication function
 	validatorOptions := &ginmiddleware.Options{
+		Options: openapi3filter.Options{
+			AuthenticationFunc: func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
+				return jwt.AuthenticationFunc(ctx, input)
+			},
+		},
 		SilenceServersWarning: silenceServersWarning,
 	}
+
 	validator := ginmiddleware.OapiRequestValidatorWithOptions(spec, validatorOptions)
 	if err != nil {
 		log.Panicf("Failed to create validator: %v", err)
@@ -55,8 +90,7 @@ func main() {
 		ErrorHandler: nil,
 	}
 
-	SessionHandler := handlers.NewSessionHandler()
-	api.RegisterHandlersWithOptions(r, SessionHandler, options)
+	api.RegisterHandlersWithOptions(r, opp_auth_handlers, options)
 
 	fmt.Println("OPP Backend starting on :8080")
 	log.Fatal(r.Run(":8080"))
