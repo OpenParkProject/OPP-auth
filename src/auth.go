@@ -92,6 +92,6 @@ func main() {
 
 	api.RegisterHandlersWithOptions(r, opp_auth_handlers, options)
 
-	fmt.Println("OPP Backend starting on :8090")
+	fmt.Println("OPP Auth starting on :8090")
 	log.Fatal(r.Run(":8090"))
 }
