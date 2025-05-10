@@ -23,12 +23,24 @@ var initErr error
 
 var schemaPath = "postegres_schema_v1.sql"
 
+var OPP_AUTH_DB_HOST = os.Getenv("OPP_AUTH_DB_HOST")
+var OPP_AUTH_DB_PORT = os.Getenv("OPP_AUTH_DB_PORT")
+var POSTGRES_AUTH_USER = os.Getenv("POSTGRES_AUTH_USER")
+var POSTGRES_AUTH_PASSWORD = os.Getenv("POSTGRES_AUTH_PASSWORD")
+var POSTGRES_AUTH_DB = os.Getenv("POSTGRES_AUTH_DB")
+
 func Init() error {
 	once.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		pool, err := pgxpool.New(ctx, "postgres://user:password@172.17.0.1:5432/db")
+		pool, err := pgxpool.New(ctx, fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+			POSTGRES_AUTH_USER,
+			POSTGRES_AUTH_PASSWORD,
+			OPP_AUTH_DB_HOST,
+			OPP_AUTH_DB_PORT,
+			POSTGRES_AUTH_DB,
+		))
 		if err != nil {
 			initErr = fmt.Errorf("unable to create connection pool: %w", err)
 			return
