@@ -21,7 +21,7 @@ var instance *DB
 var once sync.Once
 var initErr error
 
-var schemaPath = "postegres_schema_v1.sql"
+var schemaPath = "postgres_schema_v1.sql"
 
 var OPP_AUTH_DB_HOST = os.Getenv("OPP_AUTH_DB_HOST")
 var OPP_AUTH_DB_PORT = os.Getenv("OPP_AUTH_DB_PORT")
