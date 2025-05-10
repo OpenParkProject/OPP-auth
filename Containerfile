@@ -16,6 +16,6 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root/
 COPY --from=builder /go/bin/opp-auth .
 COPY --from=builder /go/src/app/api/openapi.yaml ./api/openapi.yaml
-EXPOSE 8080
+EXPOSE 8090
 
 CMD ["./opp-auth"]
