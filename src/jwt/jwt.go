@@ -2,7 +2,6 @@ package jwt
 
 import (
 	"OPP/auth/api"
-	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -10,10 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -108,55 +105,4 @@ func ValidateToken(tokenString string) (*jwt.Token, error) {
 	}
 
 	return token, nil
-}
-
-func AuthenticationFunc(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
-	req := input.RequestValidationInput.Request
-	if req == nil {
-		return errors.New("missing HTTP request in authentication input")
-	}
-
-	authHeader := req.Header.Get("Authorization")
-	if authHeader == "" {
-		return errors.New("missing Authorization header")
-	}
-
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return errors.New("invalid Authorization header format")
-	}
-
-	tokenstr := strings.TrimPrefix(authHeader, "Bearer ")
-	token, err := ValidateToken(tokenstr)
-	if err != nil {
-		return errors.New("failed to parse token")
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return errors.New("invalid token")
-	}
-
-	expire, err := claims.GetExpirationTime()
-	if err != nil {
-		return errors.New("failed to get expiration time")
-	}
-
-	if expire.Before(time.Now()) {
-		return errors.New("token expired")
-	}
-
-	username, ok := claims["username"].(string)
-	if !ok {
-		return errors.New("missing username in token claims")
-	}
-	role, ok := claims["role"].(string)
-	if !ok {
-		return errors.New("missing role in token claims")
-	}
-
-	// Update the request context with the username and role
-	ctx = context.WithValue(ctx, "username", username)
-	ctx = context.WithValue(ctx, "role", role)
-	*req = *req.WithContext(ctx)
-
-	return nil
 }

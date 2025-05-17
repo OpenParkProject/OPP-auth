@@ -4,9 +4,9 @@ package main
 
 import (
 	"OPP/auth/api"
+	"OPP/auth/auth"
 	"OPP/auth/db"
 	"OPP/auth/handlers"
-	"OPP/auth/jwt"
 	"OPP/auth/rbac"
 	"context"
 	"fmt"
@@ -19,7 +19,7 @@ import (
 	"github.com/oapi-codegen/oapi-codegen/v2/pkg/util"
 )
 
-var DEBUG_MODE = os.Getenv("DEBUG_MODE") == "true"
+var DEBUG_MODE = os.Getenv("DEBUG_MODE")
 
 type opp_handlers struct {
 	handlers.SessionHandlers
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	silenceServersWarning := false
-	if DEBUG_MODE {
+	if DEBUG_MODE == "true" {
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
@@ -71,7 +71,7 @@ func main() {
 	validatorOptions := &ginmiddleware.Options{
 		Options: openapi3filter.Options{
 			AuthenticationFunc: func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
-				return jwt.AuthenticationFunc(ctx, input)
+				return auth.AuthenticationFunc(ctx, input)
 			},
 		},
 		SilenceServersWarning: silenceServersWarning,
