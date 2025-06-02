@@ -63,7 +63,7 @@ func (uh *UserHandlers) GetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := uh.dao.GetUser(c.Request.Context(), usernameStr)
+	user, err := uh.dao.GetUserByUsername(c.Request.Context(), usernameStr)
 	if err != nil {
 		if errors.Is(err, dao.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"OPP/auth/api"
 	opp_jwt "OPP/auth/jwt"
 	"context"
 	"errors"
@@ -14,59 +15,74 @@ import (
 
 var DEBUG_MODE = os.Getenv("DEBUG_MODE")
 
-func AuthenticationFunc(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
+func AuthenticationWrapperFunc(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
 	req := input.RequestValidationInput.Request
 	if req == nil {
 		return errors.New("missing HTTP request in authentication input")
 	}
 
-	authHeader := req.Header.Get("Authorization")
-	if authHeader == "" {
-		return errors.New("missing Authorization header")
-	}
-
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return errors.New("invalid Authorization header format")
-	}
-
-	tokenstr := strings.TrimPrefix(authHeader, "Bearer ")
-	token, err := opp_jwt.ValidateToken(tokenstr)
+	username, role, err := AuthenticationFunc(req.Header.Get("Authorization"))
 	if err != nil {
-		return errors.New("failed to parse token")
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return errors.New("invalid token")
-	}
-
-	expire, err := claims.GetExpirationTime()
-	if err != nil {
-		return errors.New("failed to get expiration time")
-	}
-
-	if expire.Before(time.Now()) {
-		return errors.New("token expired")
-	}
-
-	username, ok := claims["username"].(string)
-	if !ok {
-		return errors.New("missing username in token claims")
-	}
-	role, ok := claims["role"].(string)
-	if !ok {
-		return errors.New("missing role in token claims")
+		return err
 	}
 
 	// Update the request context with the username and role
 	ctx = context.WithValue(ctx, "username", username)
 	ctx = context.WithValue(ctx, "role", role)
 
-	// Debug mode: override role with "admin"
-	if DEBUG_MODE == "true" {
-		ctx = context.WithValue(ctx, "role", "admin")
-	}
-
 	*req = *req.WithContext(ctx)
 
 	return nil
+}
+
+// AuthenticationFunc can be used for endpoints that aren't marked as requiring authentication
+// but still need to check auth tokens when provided.
+// Returns (username, role, error) where error is nil if authentication succeeded
+func AuthenticationFunc(authHeader string) (string, api.UserRequestRole, error) {
+	// Debug mode: override username and role
+	if DEBUG_MODE == "true" {
+		return "admin_debug", api.UserRequestRoleAdmin, nil
+	}
+
+	if authHeader == "" {
+		return "", "", errors.New("missing Authorization header")
+	}
+
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return "", "", errors.New("invalid Authorization header format")
+	}
+
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+	token, err := opp_jwt.ValidateToken(tokenStr)
+	if err != nil {
+		return "", "", errors.New("failed to parse token: " + err.Error())
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return "", "", errors.New("invalid token")
+	}
+
+	// Validate expiration time
+	expire, err := claims.GetExpirationTime()
+	if err != nil {
+		return "", "", errors.New("failed to get expiration time")
+	}
+
+	if expire.Before(time.Now()) {
+		return "", "", errors.New("token expired")
+	}
+
+	username, ok := claims["username"].(string)
+	if !ok {
+		return "", "", errors.New("missing username in token claims")
+	}
+
+	roleStr, ok := claims["role"].(string)
+	if !ok {
+		return "", "", errors.New("missing role in token claims")
+	}
+
+	role := api.UserRequestRole(roleStr)
+	return username, role, nil
 }

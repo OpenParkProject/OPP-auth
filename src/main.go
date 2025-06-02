@@ -71,7 +71,7 @@ func main() {
 	validatorOptions := &ginmiddleware.Options{
 		Options: openapi3filter.Options{
 			AuthenticationFunc: func(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
-				return auth.AuthenticationFunc(ctx, input)
+				return auth.AuthenticationWrapperFunc(ctx, input)
 			},
 		},
 		SilenceServersWarning: silenceServersWarning,

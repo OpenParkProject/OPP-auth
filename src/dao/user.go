@@ -72,7 +72,7 @@ func (d *UserDao) AddUser(c context.Context, user api.UserRequest) (int64, error
 	return id, nil
 }
 
-func (d *UserDao) GetUser(c context.Context, username string) (*api.UserResponse, error) {
+func (d *UserDao) GetUserByUsername(c context.Context, username string) (*api.UserResponse, error) {
 	query := "SELECT user_id, username, name, surname, email, role FROM users WHERE username = $1"
 	rows, err := d.db.Query(c, query, username)
 	if err != nil {
@@ -80,6 +80,25 @@ func (d *UserDao) GetUser(c context.Context, username string) (*api.UserResponse
 	}
 	defer rows.Close()
 
+	var user api.UserResponse
+	var roleStr string
+	if rows.Next() {
+		if err := rows.Scan(&user.Id, &user.Username, &user.Name, &user.Surname, &user.Email, &roleStr); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		user.Role = api.UserResponseRole(roleStr)
+		return &user, nil
+	}
+	return nil, ErrUserNotFound
+}
+
+func (d *UserDao) GetUserByEmail(c context.Context, email string) (*api.UserResponse, error) {
+	query := "SELECT user_id, username, name, surname, email, role FROM users WHERE email = $1"
+	rows, err := d.db.Query(c, query, email)
+	if err != nil {
+		return nil, fmt.Errorf("db error: %w", err)
+	}
+	defer rows.Close()
 	var user api.UserResponse
 	var roleStr string
 	if rows.Next() {
