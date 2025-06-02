@@ -33,8 +33,8 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
-	if user.Role == api.Controller || user.Role == api.Admin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot register as" + user.Role + ", permission denied"})
+	if *user.Role == api.UserRequestRoleAdmin || *user.Role == api.UserRequestRoleController {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot register as" + *user.Role + ", permission denied"})
 	}
 	// Check if the user already exists
 	_, err := h.dao.GetUser(c.Request.Context(), user.Username)
@@ -43,11 +43,13 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		return
 	}
 	// Add the user to the database
-	if err := h.dao.AddUser(c.Request.Context(), user); err != nil {
+	var id int64
+	id, err = h.dao.AddUser(c.Request.Context(), user)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add user"})
 		return
 	}
-	token, err := jwt.GenerateToken(user.Username, user.Role)
+	token, err := jwt.GenerateToken(user.Username, *user.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -58,6 +60,8 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		ExpiresIn:   int(jwt.TOKEN_EXPIRATION_TIME.Seconds()),
 		TokenType:   "Bearer",
 		User: api.UserResponse{
+			Id:       id,
+			Role:     api.UserResponseRole(*user.Role),
 			Username: user.Username,
 			Email:    user.Email,
 			Name:     user.Name,
@@ -107,10 +111,12 @@ func (h *SessionHandlers) Login(c *gin.Context) {
 		ExpiresIn:   int(jwt.TOKEN_EXPIRATION_TIME.Seconds()),
 		TokenType:   "Bearer",
 		User: api.UserResponse{
+			Id:       user.Id,
 			Username: user.Username,
 			Email:    user.Email,
 			Name:     user.Name,
 			Surname:  user.Surname,
+			Role:     api.UserResponseRole(role),
 		},
 	}
 	c.JSON(http.StatusOK, sessionResponse)
@@ -160,10 +166,12 @@ func (h *SessionHandlers) GetSession(c *gin.Context) {
 		ExpiresIn:   int(jwt.TOKEN_EXPIRATION_TIME.Seconds()),
 		TokenType:   "Bearer",
 		User: api.UserResponse{
+			Id:       user.Id,
 			Username: user.Username,
 			Email:    user.Email,
 			Name:     user.Name,
 			Surname:  user.Surname,
+			Role:     api.UserResponseRole(roleStr),
 		},
 	}
 	c.JSON(http.StatusOK, sessionResponse)
