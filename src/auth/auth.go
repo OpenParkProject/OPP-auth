@@ -2,6 +2,7 @@ package auth
 
 import (
 	"OPP/auth/api"
+	"OPP/auth/dao"
 	opp_jwt "OPP/auth/jwt"
 	"context"
 	"errors"
@@ -38,10 +39,24 @@ func AuthenticationWrapperFunc(ctx context.Context, input *openapi3filter.Authen
 // AuthenticationFunc can be used for endpoints that aren't marked as requiring authentication
 // but still need to check auth tokens when provided.
 // Returns (username, role, error) where error is nil if authentication succeeded
-func AuthenticationFunc(authHeader string) (string, api.UserRequestRole, error) {
+func AuthenticationFunc(authHeader string) (string, string, error) {
 	// Debug mode: override username and role
 	if DEBUG_MODE == "true" {
-		return "admin_debug", api.UserRequestRoleAdmin, nil
+		// make sure to create a debug user if it doesn't exist
+		role := api.UserRequestRoleAdmin
+		debug_user := api.UserRequest{
+			Username: "admin_debug",
+			Password: "admin_debug",
+			Role:     &role,
+			Email:    "admin.debug@debug.com",
+			Name:     "Admin",
+			Surname:  "Debug",
+		}
+		_, err := dao.NewUserDao().AddUser(context.Background(), debug_user)
+		if err != nil && !errors.Is(err, dao.ErrUserAlreadyExists) {
+			return "", "", errors.New("failed to create debug user: " + err.Error())
+		}
+		return "admin_debug", "admin", nil
 	}
 
 	if authHeader == "" {
@@ -83,6 +98,5 @@ func AuthenticationFunc(authHeader string) (string, api.UserRequestRole, error) 
 		return "", "", errors.New("missing role in token claims")
 	}
 
-	role := api.UserRequestRole(roleStr)
-	return username, role, nil
+	return username, roleStr, nil
 }

@@ -86,7 +86,7 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		}
 
 		// Check if the user has admin privileges
-		if role != api.UserRequestRoleAdmin {
+		if role != "admin" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Admin privileges required to register " + string(*newUser.Role) + " accounts"})
 			return
 		}
