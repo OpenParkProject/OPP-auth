@@ -42,7 +42,7 @@ func (uh *UserHandlers) GetUsers(c *gin.Context, params api.GetUsersParams) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
 		return
 	}
-	if roleStr != "admin" {
+	if roleStr != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -96,7 +96,7 @@ func (uh *UserHandlers) DeleteUsers(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
 		return
 	}
-	if roleStr != "admin" {
+	if roleStr != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -190,7 +190,7 @@ func (uh *UserHandlers) GetUserById(c *gin.Context, id int64) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
 		return
 	}
-	if roleStr != "admin" {
+	if roleStr != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -229,7 +229,7 @@ func (uh *UserHandlers) UpdateUserById(c *gin.Context, id int64) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
 		return
 	}
-	if roleStr != "admin" {
+	if roleStr != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -281,7 +281,7 @@ func (uh *UserHandlers) DeleteUserById(c *gin.Context, id int64) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
 		return
 	}
-	if roleStr != "admin" {
+	if roleStr != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

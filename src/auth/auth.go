@@ -43,20 +43,20 @@ func AuthenticationFunc(authHeader string) (string, string, error) {
 	// Debug mode: override username and role
 	if DEBUG_MODE == "true" {
 		// make sure to create a debug user if it doesn't exist
-		role := api.UserRequestRoleAdmin
+		role := api.UserRequestRoleSuperuser
 		debug_user := api.UserRequest{
-			Username: "admin_debug",
-			Password: "admin_debug",
+			Username: "superuser_debug",
+			Password: "superuser_debug",
 			Role:     &role,
-			Email:    "admin.debug@debug.com",
-			Name:     "Admin",
-			Surname:  "Debug",
+			Email:    "superuser.debug@debug.com",
+			Name:     "superuser",
+			Surname:  "debug",
 		}
 		_, err := dao.NewUserDao().AddUser(context.Background(), debug_user)
 		if err != nil && !errors.Is(err, dao.ErrUserAlreadyExists) {
 			return "", "", errors.New("failed to create debug user: " + err.Error())
 		}
-		return "admin_debug", "admin", nil
+		return "superuser_debug", "superuser", nil
 	}
 
 	if authHeader == "" {

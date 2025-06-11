@@ -76,8 +76,27 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		newUser.Role = &defaultRole
 	}
 
-	// If registering as an admin or controller, verify permissions
-	if *newUser.Role == api.UserRequestRoleAdmin || *newUser.Role == api.UserRequestRoleController {
+	if *newUser.Role == api.UserRequestRoleSuperuser {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Superuser registration is not allowed"})
+		return
+	}
+	// If registering as admin, you need to be a superuser
+	if *newUser.Role == api.UserRequestRoleAdmin {
+		// Check if the current user is authenticated with superuser privileges
+		_, role, err := auth.AuthenticationFunc(c.GetHeader("Authorization"))
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication failed: " + err.Error()})
+			return
+		}
+		// Check if the user has superuser privileges
+		if role != "superuser" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Superuser privileges required to register " + string(*newUser.Role) + " accounts"})
+			return
+		}
+	}
+
+	// If registering as controller, you need to be at least an admin
+	if *newUser.Role == api.UserRequestRoleController {
 		// Check if the current user is authenticated with admin privileges
 		_, role, err := auth.AuthenticationFunc(c.GetHeader("Authorization"))
 		if err != nil {
@@ -86,7 +105,7 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		}
 
 		// Check if the user has admin privileges
-		if role != "admin" {
+		if role != "admin" && role != "superuser" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Admin privileges required to register " + string(*newUser.Role) + " accounts"})
 			return
 		}
