@@ -65,7 +65,7 @@ func init() {
 	}
 }
 
-func GenerateToken(username string, role api.UserRequestRole) (string, error) {
+func GenerateAccessToken(username string, role api.UserRequestRole) (string, error) {
 	if PrivateKey == nil {
 		return "", errors.New("private key not available")
 	}
@@ -84,7 +84,7 @@ func GenerateToken(username string, role api.UserRequestRole) (string, error) {
 	return tokenString, nil
 }
 
-func ValidateToken(tokenString string) (*jwt.Token, error) {
+func ValidateAccessToken(tokenString string) (*jwt.Token, error) {
 	if PublicKey == nil {
 		return nil, errors.New("public key not available")
 	}

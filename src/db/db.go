@@ -29,6 +29,9 @@ var POSTGRES_AUTH_USER = os.Getenv("POSTGRES_AUTH_USER")
 var POSTGRES_AUTH_PASSWORD = os.Getenv("POSTGRES_AUTH_PASSWORD")
 var POSTGRES_AUTH_DB = os.Getenv("POSTGRES_AUTH_DB")
 
+var SUPERUSER_USERNAME = os.Getenv("SUPERUSER_USERNAME")
+var SUPERUSER_PASSWORD = os.Getenv("SUPERUSER_PASSWORD")
+
 func Init() error {
 	once.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -63,6 +66,15 @@ func Init() error {
 		if err != nil {
 			pool.Close()
 			initErr = fmt.Errorf("failed to apply database schema: %w", err)
+			return
+		}
+		// Create Superuser if it doesn't exist
+		superuser_query := `INSERT INTO users (username, name, surname, email, password, role) 
+		VALUES ($1, $2, $3, $4, $5, 'superuser') ON CONFLICT DO NOTHING`
+		_, err = pool.Exec(ctx, superuser_query, SUPERUSER_USERNAME, "OpenPark", "Superuser", "superuser@openpark.com", SUPERUSER_PASSWORD)
+		if err != nil {
+			pool.Close()
+			initErr = fmt.Errorf("failed to create superuser: %w", err)
 			return
 		}
 

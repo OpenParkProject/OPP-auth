@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"OPP/auth/api"
+	"OPP/auth/auth"
 	"OPP/auth/dao"
 	"errors"
 	"net/http"
@@ -22,27 +23,11 @@ func NewUserHandler() *UserHandlers {
 func (uh *UserHandlers) GetUsers(c *gin.Context, params api.GetUsersParams) {
 	// Auth middleware sets values in request context
 	// not in gin context
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	_, role, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
-	_, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
-		return
-	}
-	role := c.Request.Context().Value("role")
-	if role == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
-		return
-	}
-	if roleStr != "superuser" {
+	if role != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -52,18 +37,12 @@ func (uh *UserHandlers) GetUsers(c *gin.Context, params api.GetUsersParams) {
 }
 
 func (uh *UserHandlers) GetUser(c *gin.Context) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	usernameStr, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
+	username, _, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
 
-	user, err := uh.dao.GetUserByUsername(c.Request.Context(), usernameStr)
+	user, err := uh.dao.GetUserByUsername(c.Request.Context(), username)
 	if err != nil {
 		if errors.Is(err, dao.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
@@ -76,27 +55,11 @@ func (uh *UserHandlers) GetUser(c *gin.Context) {
 }
 
 func (uh *UserHandlers) DeleteUsers(c *gin.Context) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	_, role, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
-	_, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
-		return
-	}
-	role := c.Request.Context().Value("role")
-	if role == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
-		return
-	}
-	if roleStr != "superuser" {
+	if role != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -109,18 +72,12 @@ func (uh *UserHandlers) DeleteUsers(c *gin.Context) {
 }
 
 func (uh *UserHandlers) DeleteUser(c *gin.Context) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	usernameStr, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
+	username, _, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
 
-	if err := uh.dao.DeleteUser(c.Request.Context(), usernameStr); err != nil {
+	if err := uh.dao.DeleteUser(c.Request.Context(), username); err != nil {
 		if err == dao.ErrUserNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
@@ -132,14 +89,8 @@ func (uh *UserHandlers) DeleteUser(c *gin.Context) {
 }
 
 func (uh *UserHandlers) UpdateUser(c *gin.Context) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	usernameStr, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
+	username, _, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
 
@@ -149,7 +100,7 @@ func (uh *UserHandlers) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if err := uh.dao.UpdateUser(c.Request.Context(), usernameStr, userUpdateRequest); err != nil {
+	if err := uh.dao.UpdateUser(c.Request.Context(), username, userUpdateRequest); err != nil {
 		if err == dao.ErrUserNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
@@ -169,67 +120,35 @@ func (uh *UserHandlers) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "user updated successfully"})
 }
 
-func (uh *UserHandlers) GetUserById(c *gin.Context, id int64) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+func (uh *UserHandlers) GetUserByUsername(c *gin.Context, username string) {
+	username, role, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
-	_, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
-		return
-	}
-	role := c.Request.Context().Value("role")
-	if role == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
-		return
-	}
-	if roleStr != "superuser" {
+	if role != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 
-	user, err := uh.dao.GetUserById(c.Request.Context(), id)
+	user, err := uh.dao.GetUserByUsername(c.Request.Context(), username)
 	if err != nil {
 		if errors.Is(err, dao.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user by ID"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user by username"})
 		return
 	}
 
 	c.JSON(http.StatusOK, user)
 }
 
-func (uh *UserHandlers) UpdateUserById(c *gin.Context, id int64) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+func (uh *UserHandlers) UpdateUserByUsername(c *gin.Context, username string) {
+	username, role, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
-	_, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
-		return
-	}
-	role := c.Request.Context().Value("role")
-	if role == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
-		return
-	}
-	if roleStr != "superuser" {
+	if role != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -240,7 +159,7 @@ func (uh *UserHandlers) UpdateUserById(c *gin.Context, id int64) {
 		return
 	}
 
-	if err := uh.dao.UpdateUserById(c.Request.Context(), id, userRequest); err != nil {
+	if err := uh.dao.UpdateUserByUsername(c.Request.Context(), username, userRequest); err != nil {
 		if errors.Is(err, dao.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
@@ -253,45 +172,29 @@ func (uh *UserHandlers) UpdateUserById(c *gin.Context, id int64) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user data"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user by ID"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user by username"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "user updated successfully"})
 }
 
-func (uh *UserHandlers) DeleteUserById(c *gin.Context, id int64) {
-	username := c.Request.Context().Value("username")
-	if username == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+func (uh *UserHandlers) DeleteUserByUsername(c *gin.Context, username string) {
+	username, role, err := auth.GetPermissions(c)
+	if err != nil {
 		return
 	}
-	_, ok := username.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
-		return
-	}
-	role := c.Request.Context().Value("role")
-	if role == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	roleStr, ok := role.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
-		return
-	}
-	if roleStr != "superuser" {
+	if role != "superuser" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 
-	if err := uh.dao.DeleteUserById(c.Request.Context(), id); err != nil {
+	if err := uh.dao.DeleteUserByUsername(c.Request.Context(), username); err != nil {
 		if errors.Is(err, dao.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user by ID"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user by username"})
 		return
 	}
 

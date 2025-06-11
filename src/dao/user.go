@@ -3,10 +3,12 @@ package dao
 import (
 	"OPP/auth/api"
 	"OPP/auth/db"
+	"OPP/auth/otp"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var (
@@ -14,6 +16,7 @@ var (
 	ErrInvalidUser       = errors.New("invalid user data")
 	ErrUserNotFound      = errors.New("user not found")
 	ErrInvalidPassword   = errors.New("invalid password")
+	ErrOTPNotFound       = errors.New("OTP not found")
 )
 
 type UserDao struct {
@@ -174,7 +177,7 @@ func (d *UserDao) DeleteUser(c context.Context, username string) error {
 }
 
 func (d *UserDao) UpdateUser(c context.Context, username string, user api.UpdateUserRequest) error {
-	query := "UPDATE users SET name = $1, surname = $2, email = $3, password = $4 WHERE username = $4"
+	query := "UPDATE users SET name = $1, surname = $2, email = $3, password = $4 WHERE username = $5"
 	result, err := d.db.Exec(c, query, user.Name, user.Surname, user.Email, user.Password, username)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -190,34 +193,14 @@ func (d *UserDao) UpdateUser(c context.Context, username string, user api.Update
 	return nil
 }
 
-func (d *UserDao) GetUserById(c context.Context, id int64) (*api.UserResponse, error) {
-	query := "SELECT user_id, username, name, surname, email, role FROM users WHERE user_id = $1"
-	rows, err := d.db.Query(c, query, id)
-	if err != nil {
-		return nil, fmt.Errorf("db error: %w", err)
-	}
-	defer rows.Close()
-
-	var user api.UserResponse
-	var roleStr string
-	if rows.Next() {
-		if err := rows.Scan(&user.Id, &user.Username, &user.Name, &user.Surname, &user.Email, &roleStr); err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
-		}
-		user.Role = api.UserResponseRole(roleStr)
-		return &user, nil
-	}
-	return nil, ErrUserNotFound
-}
-
-func (d *UserDao) UpdateUserById(c context.Context, id int64, user api.UserRequest) error {
-	query := "UPDATE users SET username = $1, name = $2, surname = $3, email = $4 WHERE user_id = $5"
-	result, err := d.db.Exec(c, query, user.Username, user.Name, user.Surname, user.Email, id)
+func (d *UserDao) UpdateUserByUsername(c context.Context, username string, user api.UserRequest) error {
+	query := "UPDATE users SET username = $1, name = $2, surname = $3, email = $4 WHERE username = $5"
+	result, err := d.db.Exec(c, query, user.Username, user.Name, user.Surname, user.Email, username)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return ErrUserAlreadyExists
 		}
-		return fmt.Errorf("failed to update user by ID: %w", err)
+		return fmt.Errorf("failed to update user by username: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
@@ -227,11 +210,11 @@ func (d *UserDao) UpdateUserById(c context.Context, id int64, user api.UserReque
 	return nil
 }
 
-func (d *UserDao) DeleteUserById(c context.Context, id int64) error {
-	query := "DELETE FROM users WHERE user_id = $1"
-	result, err := d.db.Exec(c, query, id)
+func (d *UserDao) DeleteUserByUsername(c context.Context, username string) error {
+	query := "DELETE FROM users WHERE username = $1"
+	result, err := d.db.Exec(c, query, username)
 	if err != nil {
-		return fmt.Errorf("failed to delete user by ID: %w", err)
+		return fmt.Errorf("failed to delete user by username: %w", err)
 	}
 
 	rowsAffected := result.RowsAffected()
@@ -239,4 +222,72 @@ func (d *UserDao) DeleteUserById(c context.Context, id int64) error {
 		return ErrUserNotFound
 	}
 	return nil
+}
+
+func (d *UserDao) GenerateOTP(c context.Context, username string) (api.OTPResponse, error) {
+	user, err := d.GetUserByUsername(c, username)
+	if err != nil {
+		return api.OTPResponse{}, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Create OTP
+	otpCode, exp_date, err := otp.GenerateOTP()
+	if err != nil {
+		return api.OTPResponse{}, fmt.Errorf("failed to generate OTP: %w", err)
+	}
+	query := "INSERT INTO otps (user_id, otp_code, expires_at) VALUES ($1, $2, $3) RETURNING otp_id"
+	row := d.db.QueryRow(c, query, user.Id, otpCode, exp_date)
+	var otpId int64
+	err = row.Scan(&otpId)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return api.OTPResponse{}, ErrUserAlreadyExists
+		}
+		return api.OTPResponse{}, fmt.Errorf("failed to insert OTP: %w", err)
+	}
+	return api.OTPResponse{
+		Otp:        otpCode,
+		ValidUntil: exp_date,
+	}, nil
+}
+
+func (d *UserDao) ValidateOTP(c context.Context, otpCode string) (bool, error) {
+	// Check for currently valid OTP
+	query := `
+        SELECT otp_id, user_id, expires_at FROM otps 
+        WHERE otp_code = $1 AND expires_at > CURRENT_TIMESTAMP
+        ORDER BY created_at DESC LIMIT 1
+    `
+	var otpID int64
+	var userID int64
+	var expiresAt time.Time
+
+	row := d.db.QueryRow(c, query, otpCode)
+	if err := row.Scan(&otpID, &userID, &expiresAt); err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to validate OTP: %w", err)
+	}
+
+	return true, nil
+}
+
+func (d *UserDao) GetUserByOTP(c context.Context, otpCode string) (*api.UserResponse, error) {
+	query := `
+        SELECT u.user_id, u.username, u.email, u.name, u.surname, u.role
+        FROM users u
+        JOIN otps o ON u.user_id = o.user_id
+        WHERE o.otp_code = $1 AND o.expires_at > CURRENT_TIMESTAMP
+    `
+	row := d.db.QueryRow(c, query, otpCode)
+
+	var user api.UserResponse
+	if err := row.Scan(&user.Id, &user.Username, &user.Email, &user.Name, &user.Surname, &user.Role); err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by OTP: %w", err)
+	}
+	return &user, nil
 }

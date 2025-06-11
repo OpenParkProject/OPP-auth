@@ -6,15 +6,23 @@ import (
 	opp_jwt "OPP/auth/jwt"
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
 var DEBUG_MODE = os.Getenv("DEBUG_MODE")
+
+var (
+	ErrUnauthorized    = errors.New("unauthorized")
+	ErrFailedToGetUser = errors.New("failed to get user from context")
+	ErrFailedToGetRole = errors.New("failed to get role from context")
+)
 
 func AuthenticationWrapperFunc(ctx context.Context, input *openapi3filter.AuthenticationInput) error {
 	req := input.RequestValidationInput.Request
@@ -52,9 +60,16 @@ func AuthenticationFunc(authHeader string) (string, string, error) {
 			Name:     "superuser",
 			Surname:  "debug",
 		}
-		_, err := dao.NewUserDao().AddUser(context.Background(), debug_user)
-		if err != nil && !errors.Is(err, dao.ErrUserAlreadyExists) {
-			return "", "", errors.New("failed to create debug user: " + err.Error())
+		// Check if the user already exists
+		existingUser, err := dao.NewUserDao().GetUserByUsername(context.Background(), debug_user.Username)
+		if err != nil && !errors.Is(err, dao.ErrUserNotFound) {
+			return "", "", errors.New("failed to check debug user existence: " + err.Error())
+		}
+		if existingUser == nil {
+			_, err := dao.NewUserDao().AddUser(context.Background(), debug_user)
+			if err != nil && !errors.Is(err, dao.ErrUserAlreadyExists) {
+				return "", "", errors.New("failed to create debug user: " + err.Error())
+			}
 		}
 		return "superuser_debug", "superuser", nil
 	}
@@ -68,7 +83,7 @@ func AuthenticationFunc(authHeader string) (string, string, error) {
 	}
 
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	token, err := opp_jwt.ValidateToken(tokenStr)
+	token, err := opp_jwt.ValidateAccessToken(tokenStr)
 	if err != nil {
 		return "", "", errors.New("failed to parse token: " + err.Error())
 	}
@@ -99,4 +114,31 @@ func AuthenticationFunc(authHeader string) (string, string, error) {
 	}
 
 	return username, roleStr, nil
+}
+
+func GetPermissions(c *gin.Context) (string, string, error) {
+	// Auth middleware sets values in request context
+	// not in gin context
+	username := c.Request.Context().Value("username")
+	if username == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": ErrUnauthorized.Error()})
+		return "", "", ErrUnauthorized
+	}
+	usernameStr, ok := username.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrFailedToGetUser.Error()})
+		return "", "", ErrFailedToGetUser
+	}
+	role := c.Request.Context().Value("role")
+	if role == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": ErrUnauthorized.Error()})
+		return "", "", ErrUnauthorized
+	}
+	roleStr, ok := role.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": ErrFailedToGetRole.Error()})
+		return "", "", ErrFailedToGetRole
+	}
+
+	return usernameStr, roleStr, nil
 }

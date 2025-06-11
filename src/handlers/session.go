@@ -21,37 +21,21 @@ func NewSessionHandler() *SessionHandlers {
 }
 
 func getLoggedUser(c *gin.Context, userDao dao.UserDao) (*api.UserResponse, api.UserRequestRole, error) {
-	curUsername := c.Request.Context().Value("username")
-	if curUsername == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return nil, "", nil
+	username, role, err := auth.GetPermissions(c)
+	if err != nil {
+		return nil, "", err
 	}
-	curUsernameStr, ok := curUsername.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get username"})
-		return nil, "", nil
-	}
-	user, err := userDao.GetUserByUsername(c.Request.Context(), curUsernameStr)
+	user, err := userDao.GetUserByUsername(c.Request.Context(), username)
 	if err != nil {
 		if err == dao.ErrUserNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-			return nil, "", nil
+			return nil, "", err
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
 		return nil, "", err
 	}
 
-	curRole := c.Request.Context().Value("role")
-	if curRole == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return nil, "", nil
-	}
-	curRoleStr, ok := curRole.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get role"})
-		return nil, "", nil
-	}
-	curUserRole := api.UserRequestRole(curRoleStr)
+	curUserRole := api.UserRequestRole(role)
 	return user, curUserRole, nil
 }
 
@@ -80,7 +64,7 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Superuser registration is not allowed"})
 		return
 	}
-	// If registering as admin, you need to be a superuser
+	// If registering as admin, you need to be a superuser or admin
 	if *newUser.Role == api.UserRequestRoleAdmin {
 		// Check if the current user is authenticated with superuser privileges
 		_, role, err := auth.AuthenticationFunc(c.GetHeader("Authorization"))
@@ -89,7 +73,7 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 			return
 		}
 		// Check if the user has superuser privileges
-		if role != "superuser" {
+		if role != "superuser" && role != "admin" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Superuser privileges required to register " + string(*newUser.Role) + " accounts"})
 			return
 		}
@@ -133,7 +117,7 @@ func (h *SessionHandlers) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add user"})
 		return
 	}
-	token, err := jwt.GenerateToken(newUser.Username, *newUser.Role)
+	token, err := jwt.GenerateAccessToken(newUser.Username, *newUser.Role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -185,7 +169,7 @@ func (h *SessionHandlers) Login(c *gin.Context) {
 		return
 	}
 	// Generate a new token
-	token, err := jwt.GenerateToken(user.Username, role)
+	token, err := jwt.GenerateAccessToken(user.Username, role)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
@@ -214,7 +198,7 @@ func (h *SessionHandlers) GetSession(c *gin.Context) {
 
 	// No need to fetch the user again since we already have it
 	// return a new token for the authenticated user
-	token, err := jwt.GenerateToken(user.Username, userRole)
+	token, err := jwt.GenerateAccessToken(user.Username, userRole)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
@@ -233,4 +217,60 @@ func (h *SessionHandlers) GetSession(c *gin.Context) {
 		},
 	}
 	c.JSON(http.StatusOK, sessionResponse)
+}
+
+func (h *SessionHandlers) GenerateOTP(c *gin.Context) {
+	user, userRole, err := getLoggedUser(c, h.dao)
+	if err != nil || user == nil {
+		return
+	}
+
+	if userRole != api.UserRequestRoleSuperuser && userRole != api.UserRequestRoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only admins can generate OTP"})
+		return
+	}
+
+	otp, err := h.dao.GenerateOTP(c.Request.Context(), user.Username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate OTP"})
+		return
+	}
+	c.JSON(http.StatusOK, otp)
+}
+
+func (h *SessionHandlers) ValidateOTP(c *gin.Context) {
+	var otpRequest api.OTPValidationRequest
+	if err := c.ShouldBindJSON(&otpRequest); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+	if otpRequest.Otp == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP code is required"})
+		return
+	}
+
+	valid, err := h.dao.ValidateOTP(c.Request.Context(), otpRequest.Otp)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired OTP"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "OTP validated successfully"})
+}
+
+func (h *SessionHandlers) GetUserByOTP(c *gin.Context, otp string) {
+	user, err := h.dao.GetUserByOTP(c.Request.Context(), otp)
+	if err != nil {
+		if err == dao.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user by OTP"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"username": user.Username})
 }

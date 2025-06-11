@@ -10,6 +10,8 @@ services:
       POSTGRES_AUTH_USER: user
       POSTGRES_AUTH_PASSWORD: password
       POSTGRES_AUTH_DB: db
+      SUPERUSER_USERNAME: superuser
+      SUPERUSER_PASSWORD: password
     volumes:
       - .:/src/
     ports:
