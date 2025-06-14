@@ -121,11 +121,13 @@ func (uh *UserHandlers) UpdateUser(c *gin.Context) {
 }
 
 func (uh *UserHandlers) GetUserByUsername(c *gin.Context, username string) {
-	username, role, err := auth.GetPermissions(c)
+	_, role, err := auth.GetPermissions(c)
 	if err != nil {
 		return
 	}
-	if role != "superuser" {
+	// TODO: temporary fix for admin role, need to verify if user exists when admin
+	// creating user assigning role to zone, need to add an API for checking user existence
+	if role != "superuser" && role != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -144,7 +146,7 @@ func (uh *UserHandlers) GetUserByUsername(c *gin.Context, username string) {
 }
 
 func (uh *UserHandlers) UpdateUserByUsername(c *gin.Context, username string) {
-	username, role, err := auth.GetPermissions(c)
+	_, role, err := auth.GetPermissions(c)
 	if err != nil {
 		return
 	}
@@ -180,7 +182,7 @@ func (uh *UserHandlers) UpdateUserByUsername(c *gin.Context, username string) {
 }
 
 func (uh *UserHandlers) DeleteUserByUsername(c *gin.Context, username string) {
-	username, role, err := auth.GetPermissions(c)
+	_, role, err := auth.GetPermissions(c)
 	if err != nil {
 		return
 	}
